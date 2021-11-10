@@ -140,7 +140,7 @@ void main()
 		oColor = vec4(r,g,b, 1.0);
 	}
 	else
-		oColor = vec4(0.1,0.7,0.5, 1.0);
+		oColor = vec4(0, 0, 0, 1.0);
 }
 `;
 
