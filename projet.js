@@ -286,7 +286,6 @@ function buildLandscape()
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 	update_wgl();
 }
-
 function buildWater()
 {
 	gl.deleteVertexArray(vaoWater);
@@ -418,7 +417,7 @@ function buildSkybox()
 	"textures/skybox/skybox1/front.bmp","textures/skybox/skybox1/back.bmp"]).then(update_wgl);
 	rendererSkybox = Mesh.Cube().renderer(0, -1, -1);
 }
-function buildUI()
+function buildGUI()
 {
 	UserInterface.begin();
 	sliderWaterHeight = UserInterface.add_slider("Water Height",0,100,25,update_wgl);
@@ -435,7 +434,7 @@ function buildUI()
 function init_wgl()
 {
 	ewgl.continuous_update = true;
-	buildUI();
+	buildGUI();
 	getTexturesAndFBOs();
 	shaderSkyboxProgram = ShaderProgram(vertexSkyboxShader,fragmentSkyboxShader,'skybox shader');
 	buildSkybox();
