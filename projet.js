@@ -6,6 +6,7 @@
 //--------------------------------------------------------------------------------------------------------
 var vertexSkyboxShader =
 `#version 300 es
+precision highp float;
 
 // INPUT
 layout(location = 0) in vec3 position_in;
@@ -41,6 +42,7 @@ void main()
 //--------------------------------------------------------------------------------------------------------
 var vertexLandscapeShader =
 `#version 300 es
+precision highp float;
 
 // INPUT
 layout(location = 1) in vec2 position_in;
@@ -56,14 +58,15 @@ out vec3 vNormal;
 out vec3 mPosition;
 out vec3 mNormal;
 
-// Cette fonction m'a été donné par Paul LABAYE (aucune implication de ma part dans cette dernière)
+// From https://stackoverflow.com/questions/13983189/opengl-how-to-calculate-normals-in-a-terrain-height-grid
+
 vec3 computeNormals(vec3 pos,sampler2D sampler){
-	vec3 offset = vec3(1.0/(100.-1.0),1.0/(100.-1.0),0.0);
-	float hL = texture(sampler, pos.xz - offset.xz).r;
-    float hR = texture(sampler, pos.xz + offset.xz).r;
-    float hD = texture(sampler, pos.xz - offset.zy).r;
-    float hU = texture(sampler, pos.xz + offset.zy).r;
-    return vec3(hL-hR, 2.0, hD-hU);
+	vec3 offset = vec3(1.0,1.0,0.0);
+	float heightLeft = texture(sampler, pos.xz - offset.xz).r;
+    float heightRight = texture(sampler, pos.xz + offset.xz).r;
+    float heightDown = texture(sampler, pos.xz - offset.zy).r;
+    float heightUp = texture(sampler, pos.xz + offset.zy).r;
+    return normalize(vec3(heightLeft-heightRight, 2.0, heightDown-heightUp));
 }
 void main()
 {
@@ -103,13 +106,14 @@ out vec4 oFragmentColor;
 
 void main()
 {	
+	float lightIntensity = 4.0;
 	if((uRef == 1 && mPosition.y<uWaterHeight) || (uRef == 2 && mPosition.y>uWaterHeight)) discard;
 	vec4 color = texture(uSamplerTextureLandscape, vTexCoord);
-	vec3 Kd = color.rgb;
+	vec3 diffuseColor = color.rgb;
 	vec3 lightDirection = uLightPosition - mPosition;
 	lightDirection /= sqrt(dot(lightDirection, lightDirection));
 	float diffuse = max(dot(mNormal, normalize(lightDirection)), 0.0);
-	vec3 iD = 3.0*Kd*vec3(diffuse)/M_PI;
+	vec3 iD = lightIntensity*diffuseColor*vec3(diffuse)/M_PI;
 	oFragmentColor = vec4(iD, 1.0);
 }
 `;
@@ -171,25 +175,26 @@ void main()
 	vec3 n = normalize(vec3(0,1,0));
 	vec3 viewDirection = normalize(uCamPosition - mPosition);
 	float coeff = acos(dot(n,viewDirection))/M_PI;
-	vec3 normal = texture(uSamplerNormales,textureCoord+uTime/30.0).rgb;
+	vec3 normal = texture(uSamplerNormales,textureCoord+uTime/50.0).rgb;
 	normal.x = normal.x*2.0-1.0;
 	normal.z = normal.z*2.0-1.0;
 	normal.y = 10.0;
 	normal = normalize(normal);
 
-	vec2 distortion = texture(uSamplerDistortion, textureCoord+uTime/30.0).rg;
+	vec2 distortion = texture(uSamplerDistortion, textureCoord+uTime/50.0).rg;
 	vec2 NDC = (clipPosition.xy/clipPosition.w)/2.0+0.5;
 	NDC += distortion/50.;
 
-	vec2 coordReflection = vec2(NDC.x,NDC.y);
-	vec2 coordRefraction = vec2(NDC.x,-NDC.y);
+	vec2 coordRefraction = vec2(NDC.x,NDC.y);
+	vec2 coordReflection = vec2(NDC.x,-NDC.y);
 	vec4 reflection = texture(uSamplerReflection, coordReflection);
 	vec4 refraction = texture(uSamplerRefraction, coordRefraction);
+
 	vec3 color = mix(reflection, refraction, 1.0-2.5*coeff).rgb;
 	vec3 lightDirection = normalize(uLightPosition - mPosition);
 	vec3 halfDirection = normalize(viewDirection + lightDirection);
-	vec3 ISpec = vec3(max(0.0, pow(dot(n, halfDirection), 128.0)));
-	oFragmentColor = vec4(color + ISpec,1.0);
+	vec3 specular = vec3(max(0.0, pow(dot(n, halfDirection), 256.0)));
+	oFragmentColor = vec4(color + specular,1.0);
 }
 `;
 //--------------------------------------------------------------------------------------------------------
@@ -216,8 +221,8 @@ var textureDistortion = null;
 var textureNormales = null;
 var fboReflection = null;
 var fboRefraction = null;
-var fboWidth = 1024;
-var fboHeight = 1024;
+var fboWidth = 4096;
+var fboHeight = 4096;
 
 // UI
 var sliderWaterHeight = null;
@@ -289,12 +294,13 @@ function buildLandscape()
 function buildWater()
 {
 	gl.deleteVertexArray(vaoWater);
+				//   x  z
 	let vertices = [-1,-1,
 					-1, 1,
 					 1,-1,
 					 1, 1];
-	let indices =  [0,1,2,
-					1,2,3];
+	let indices =  [0,1,2,	// triangle 1
+					1,2,3]; // triangle 2
 
 	let vbo_positions = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, vbo_positions); 
@@ -420,11 +426,11 @@ function buildSkybox()
 function buildGUI()
 {
 	UserInterface.begin();
-	sliderWaterHeight = UserInterface.add_slider("Water Height",0,100,25,update_wgl);
+	sliderWaterHeight = UserInterface.add_slider("Water Height",0,100,31,update_wgl);
 	UserInterface.use_field_set('V', "Light Position");
 		sliderLightPosX = UserInterface.add_slider("X",-100,100,10,update_wgl);
-		sliderLightPosY = UserInterface.add_slider("Y",-100,100,50,update_wgl);
-		sliderLightPosZ = UserInterface.add_slider("Z",-100,100,-30,update_wgl);
+		sliderLightPosZ = UserInterface.add_slider("Z",-100,100,50,update_wgl);
+		sliderLightPosY = UserInterface.add_slider("Y",-100,100,-30,update_wgl);
 	UserInterface.end_use();
 	UserInterface.end();
 }
@@ -501,15 +507,15 @@ function drawWater(camPos,lightPos,waterH)
 function firstPass(cameraInfos,lightPosition,waterHeight)
 {
 	gl.bindFramebuffer(gl.FRAMEBUFFER,fboReflection);
-	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	gl.viewport(0,0,fboWidth,fboHeight);
 	
 	var eye = Vec3(cameraInfos[0].xyz);
 	eye.y = eye.y - 2*(eye.y - waterHeight);
-	var center = Vec3(cameraInfos[1]);
-	center.y = -center.y;
+	var direction = Vec3(cameraInfos[1]);
+	direction.y = -direction.y;
 	var up = Vec3(0,1,0);
-	ewgl.scene_camera.look(eye,center,up);
+	ewgl.scene_camera.look(eye,direction,up);
 	drawSkybox();
 	drawLandscape(lightPosition,waterHeight,1);
 }
@@ -534,7 +540,7 @@ function render(cameraInfos,lightPosition,waterHeight)
 function draw_wgl()
 {
 	var cameraInf = ewgl.scene_camera.get_look_info();
-	var lightPos = [sliderLightPosX.value,sliderLightPosY.value,sliderLightPosZ.value];
+	var lightPos = [sliderLightPosX.value,sliderLightPosZ.value,sliderLightPosY.value];
 	var waterH = sliderWaterHeight.value/100;
 
 	firstPass(cameraInf,lightPos,waterH);
