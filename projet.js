@@ -175,25 +175,28 @@ void main()
 	vec3 n = normalize(vec3(0,1,0));
 	vec3 viewDirection = normalize(uCamPosition - mPosition);
 	float coeff = acos(dot(n,viewDirection))/M_PI;
-	vec3 normal = texture(uSamplerNormales,textureCoord+uTime/50.0).rgb;
+
+	vec2 distortion = texture(uSamplerDistortion, textureCoord+uTime/35.0).rg;
+	vec2 NDC = (clipPosition.xy/clipPosition.w)/2.0+0.5;
+	NDC += distortion/35.;
+
+	vec3 normal = texture(uSamplerNormales,textureCoord+uTime/35.0).rgb;
+	// vec3 normal = texture(uSamplerNormales,distortion).rgb;
 	normal.x = normal.x*2.0-1.0;
 	normal.z = normal.z*2.0-1.0;
 	normal.y = 10.0;
 	normal = normalize(normal);
-
-	vec2 distortion = texture(uSamplerDistortion, textureCoord+uTime/50.0).rg;
-	vec2 NDC = (clipPosition.xy/clipPosition.w)/2.0+0.5;
-	NDC += distortion/50.;
-
-	vec2 coordRefraction = vec2(NDC.x,NDC.y);
+	
 	vec2 coordReflection = vec2(NDC.x,-NDC.y);
+	vec2 coordRefraction = vec2(NDC.x,NDC.y);
+
 	vec4 reflection = texture(uSamplerReflection, coordReflection);
 	vec4 refraction = texture(uSamplerRefraction, coordRefraction);
 
 	vec3 color = mix(reflection, refraction, 1.0-2.5*coeff).rgb;
 	vec3 lightDirection = normalize(uLightPosition - mPosition);
 	vec3 halfDirection = normalize(viewDirection + lightDirection);
-	vec3 specular = vec3(max(0.0, pow(dot(n, halfDirection), 256.0)));
+	vec3 specular = vec3(max(0.0, pow(dot(normal, halfDirection), 1024.0)));
 	oFragmentColor = vec4(color + specular,1.0);
 }
 `;
